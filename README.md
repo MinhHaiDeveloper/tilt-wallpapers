@@ -60,7 +60,11 @@ Go to **[Releases](../../releases)**, download the latest `TiltWallpapers-v….a
 
 Open an **[Issue](../../issues)** with your phone model, Android version, app version (**Settings → About**) and a screenshot or video if you can.
 
-### Licences
+### Licence
+
+Copyright © 2026 MinhHaiDeveloper. Tilt Wallpapers is free software under the **[GNU General Public License v3.0](LICENSE)**: you may use, study, fork, change and share it, as long as you keep this copyright notice and release your changes under the same licence with their source code.
+
+The name **"Tilt Wallpapers"** and the app icon are not covered by the licence: forks you publish must use their own name and icon.
 
 The bundled fonts are under the SIL Open Font License; the Flip transition is based on the iphone-duo project (MIT). Full texts in the app: **Settings → About → Open-source licences**.
 
@@ -123,5 +127,9 @@ Vào mục **[Releases](../../releases)**, tải file `TiltWallpapers-v….apk` 
 Mở một **[Issue](../../issues)**, kèm tên máy, phiên bản Android, phiên bản app (**Cài đặt → Thông tin**) và ảnh chụp / video nếu có.
 
 ### Giấy phép
+
+Bản quyền © 2026 MinhHaiDeveloper. Tilt Wallpapers là phần mềm tự do theo giấy phép **[GNU General Public License v3.0](LICENSE)**: bạn được dùng, đọc, fork, sửa và chia sẻ, miễn là giữ nguyên dòng bản quyền này và phát hành phần sửa đổi theo cùng giấy phép, kèm mã nguồn.
+
+Tên **"Tilt Wallpapers"** và icon của app không nằm trong giấy phép: bản fork phát hành ra phải dùng tên và icon riêng.
 
 Font kèm theo dùng giấy phép SIL Open Font License; hiệu ứng Flip dựa trên dự án iphone-duo (MIT). Toàn văn trong app: **Cài đặt → Thông tin → Giấy phép mã nguồn mở**.

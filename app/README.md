@@ -93,3 +93,7 @@ for EFFECT 1–8 × TRANS 0–10 × DEPTH 0–1 × CLOCK 0–1 (352 variants). K
 ## Testing
 
 No automated UI tests. Check on a real device or emulator: open **"Đồng hồ & chữ" / "Clock & text"** (Hiệu ứng / Effects tab), the image editor (**"Chỉnh sửa" / "Edit"**), **"Xem thử" / "Preview"** in a set, and set the live wallpaper; watch `adb logcat` for `FATAL` and `TiltRenderer` (shader compile / link errors are logged there).
+
+## Licence
+
+GPL-3.0 (see [`LICENSE`](../LICENSE)), copyright © 2026 MinhHaiDeveloper. Contributions are accepted under the same licence. Bundled fonts: SIL OFL; Flip transition based on iphone-duo (MIT); their licence texts live in `src/main/assets/licenses/` and are shown in the app (**"Giấy phép mã nguồn mở" / "Open-source licences"**).

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Two stacked phones, the front one tilted: a one-colour glyph that also works as the themed icon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <group android:rotation="-14" android:pivotX="54" android:pivotY="54">
+        <path android:fillColor="#59FFFFFF"
+            android:pathData="M44,30h20a6,6 0,0 1,6 6v36a6,6 0,0 1,-6 6h-20a6,6 0,0 1,-6 -6v-36a6,6 0,0 1,6 -6z" />
+    </group>
+    <group android:rotation="12" android:pivotX="54" android:pivotY="54">
+        <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd"
+            android:pathData="M44,30h20a6,6 0,0 1,6 6v36a6,6 0,0 1,-6 6h-20a6,6 0,0 1,-6 -6v-36a6,6 0,0 1,6 -6zM46,36v30l18,-18v-12z" />
+    </group>
+</vector>

@@ -1,0 +1,33 @@
+# --- Signing: never commit (keep a private backup of the keystore elsewhere) ---
+keystore/
+keystore.properties
+*.jks
+*.keystore
+
+# --- Built APKs: published as GitHub Releases instead ---
+released-apk/
+*.apk
+*.aab
+
+# --- Build output and caches ---
+build/
+.gradle/
+.kotlin/
+.externalNativeBuild/
+.cxx/
+captures/
+
+# --- Machine-specific ---
+local.properties
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# --- JVM crash logs from builds ---
+hs_err_pid*.log
+replay_pid*.log
+*.log
+
+# --- Private notes (changelog, user stories) ---
+notes/

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Quick-settings / shortcut glyph: a phone tilted to the side. Filled, single colour (tinted by the system). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <group android:pivotX="12" android:pivotY="12" android:rotation="-18">
+        <path android:fillColor="#FFFFFFFF"
+            android:pathData="M8,2h8a2,2 0,0 1,2 2v16a2,2 0,0 1,-2 2H8a2,2 0,0 1,-2 -2V4a2,2 0,0 1,2 -2zM8,5v12h8V5H8zM12,18.2a0.9,0.9 0,1 0,0.01 0z"/>
+    </group>
+    <path android:fillColor="#FFFFFFFF" android:pathData="M2.5,9.5a9.5,9.5 0,0 0,0 5l1.6,-0.4a7.8,7.8 0,0 1,0 -4.2z"/>
+    <path android:fillColor="#FFFFFFFF" android:pathData="M21.5,9.5a9.5,9.5 0,0 1,0 5l-1.6,-0.4a7.8,7.8 0,0 0,0 -4.2z"/>
+</vector>

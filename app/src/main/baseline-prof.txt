@@ -1,0 +1,6 @@
+# Compile all of the app ahead of time on install (ProfileInstaller), so screens, previews and the wallpaper
+# renderer run at full speed from the first use instead of stuttering while the JIT warms up.
+HSPLcom/tilt/wallpapers/**;->**(**)**
+Lcom/tilt/wallpapers/**;
+HSPLdev/chrisbanes/haze/**;->**(**)**
+Ldev/chrisbanes/haze/**;

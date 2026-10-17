@@ -61,6 +61,7 @@ import com.tilt.wallpapers.ui.components.bounceClick
 private class Release(val version: String, val date: String, val notes: List<String>)
 
 private val releases = listOf(
+    Release("1.5.1.6", "17/10/2026", listOf("Sửa văng app khi kéo giãn ngang đồng hồ chạm mép màn hình", "Đồng hồ không còn rộng quá màn hình với font lớn", "Sửa bóng của đồng hồ bị cắt thành khối khi chuyển ảnh với font hẹp")),
     Release("1.5.1.5", "16/10/2026", listOf("Hàng nhóm cài đặt lướt ngang khi có hơn 5 nhóm", "Quay lại từ chỉnh mặt nạ / chủ thể vẫn mở tab Depth")),
     Release(
         "1.5.1.4", "16/10/2026",

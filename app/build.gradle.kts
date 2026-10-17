@@ -21,8 +21,8 @@ android {
         applicationId = "com.tilt.wallpapers"
         minSdk = 29
         targetSdk = 36
-        versionCode = 53
-        versionName = "1.5.1.5"
+        versionCode = 54
+        versionName = "1.5.1.6"
     }
 
     signingConfigs {

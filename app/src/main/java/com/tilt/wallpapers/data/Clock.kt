@@ -492,11 +492,16 @@ object ClockPlace {
     const val WALL = 0.02f
 
     /** The whole clock inside the screen (moving or resizing could push part of it off an edge). */
-    fun onScreen(p: ClockPlacement, shape: ClockText.Shape, screenAspect: Float): ClockPlacement {
-        val bw = bwOf(p, shape, screenAspect)
-        val hw = min(bw, 1f) / 2f; val hh = min(p.h, 1f) / 2f
+    fun onScreen(p0: ClockPlacement, shape: ClockText.Shape, screenAspect: Float): ClockPlacement {
+        // Never wider than the screen (a big clock, or a wide user font): smaller instead, so its frame and
+        // side handles always stay inside the preview.
+        val w0 = bwOf(p0, shape, screenAspect)
+        val p = if (w0 > MAX_W) p0.copy(h = p0.h * MAX_W / w0) else p0
+        val bw = min(bwOf(p, shape, screenAspect), 1f)
+        val hw = bw / 2f; val hh = min(p.h, 1f) / 2f
         return p.copy(cx = p.cx.coerceIn(hw, 1f - hw), cy = p.cy.coerceIn(hh, 1f - hh))
     }
+    private const val MAX_W = 0.98f
 
     /** Block width on screen (fraction of the screen width). */
     fun bwOf(p: ClockPlacement, shape: ClockText.Shape, screenAspect: Float) = p.h * shape.aspect * p.sx / screenAspect

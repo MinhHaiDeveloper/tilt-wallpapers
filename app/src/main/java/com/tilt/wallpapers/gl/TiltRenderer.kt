@@ -250,6 +250,7 @@ class TiltRenderer(private val maxTexture: Int) : GlScene {
         if (still) for (i in 0..3) { val v = clk[i] + (clk[4 + i] - clk[i]) * progress; clk[i] = v; clk[4 + i] = v }
         glUniform1f(p.u("uClockMix"), if (morph) progress else -1f)
         glUniform2f(p.u("uStk"), la.toFloat(), lb.toFloat())
+        glUniform2f(p.u("uCkAsp"), clockAspect[la], clockAspect[lb])
         glUniform4fv(p.u("uDigA"), 4, digitBoxes[la], 0)
         glUniform4fv(p.u("uDigB"), 4, digitBoxes[lb], 0)
         glUniform2f(p.u("uTop"), if (a.clock?.topOn(st) == true) 1f else 0f, if (bb.clock?.topOn(st) == true) 1f else 0f)
@@ -399,6 +400,9 @@ class TiltRenderer(private val maxTexture: Int) : GlScene {
     @Volatile private var tiltY = 0f
     /** Smoothed calibrated roll in degrees, for "Theo tay". */
     @Volatile private var rollNow = 0f
+    /** Offscreen effect thumbnails: no [host], no clock or texts. */
+    private var stills = false
+
     // Unlock motion in progress (0 = none): background zoom, subject zoom, background blur, clock / text scale.
     private var unlockStart = 0L
     private var unlockBg = 0f; private var unlockFg = 0f; private var unlockBlur = 0f; private var typeZoom = 1f
@@ -587,6 +591,7 @@ class TiltRenderer(private val maxTexture: Int) : GlScene {
 
     /** Offscreen: renders [img] once per effect. Call on a thread with a current context and a w*h surface. */
     fun renderStills(img: WallImage, base: Settings, effects: List<Effect>, w: Int, h: Int): List<Bitmap> {
+        stills = true
         if (quad == 0) initGl()
         width = w; height = h
         glViewport(0, 0, w, h)
@@ -692,8 +697,9 @@ class TiltRenderer(private val maxTexture: Int) : GlScene {
     private fun draw(a: WallImage, ta: Tex, b: WallImage?, tb: Tex?, progress: Float) {
         val st = cfg
         val depth = ta.mask != 0 || (tb?.mask ?: 0) != 0
-        val clockOn = ensureClock()
-        val textOn = textGl.ensure(textLayer, seq, height)
+        // Effect thumbnails (offscreen, no render thread) leave out the clock and texts.
+        val clockOn = !stills && ensureClock()
+        val textOn = !stills && textGl.ensure(textLayer, seq, height)
         val clock = (clockOn || textOn) && clockVis > 0.001f
         val p = program(st.effect, if (b != null) st.transition else null, depth, clock)
         glUseProgram(p.id)
@@ -888,6 +894,8 @@ class TiltRenderer(private val maxTexture: Int) : GlScene {
 
     /** Keeps [tex]'s shadow map in step with the softness slider, rebuilding it off the GL thread. */
     private fun ensureShadow(tex: Tex, soft: Float) {
+        // Stills have no render thread to come back to (their shadow is made up front): it crashed the decoder.
+        if (stills) return
         val src = tex.shadowSrc ?: return
         val want = (soft * 50).roundToInt() / 50f
         if (tex.shadowBusy || want == tex.shadowSoft) return

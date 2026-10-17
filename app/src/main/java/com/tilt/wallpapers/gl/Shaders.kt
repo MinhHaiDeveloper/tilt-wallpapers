@@ -159,6 +159,10 @@ uniform vec4 uCoreA[2]; uniform vec4 uCoreB[2]; // date and colon boxes in each 
 uniform vec2 uLay;                       // layout of each image: 0 horizontal, 1 vertical
 uniform vec2 uTop;                       // per image: clock on top of everything (1) or behind the subject (0)
 uniform float uClockOn;                  // 0: the layer only has free texts
+uniform vec2 uCkAsp;                     // width / height of each image's clock texture
+// How far a digit's glow reaches around its cell, in texture units: a third of the cell's height, the same
+// distance across (texture units differ across and down; condensed fonts make a narrow texture).
+vec2 glowReach(vec4 box, float asp) { float g = (box.w - box.y) * 0.32; return vec2(g / asp, g); }
 // Free texts (up to two, sharing one layer). Texture: a strip per line, r = glyphs, g / b / a = halos of every
 // third character. Data texture row 0: each character's cell (l, t, r, b) in em; row 1: its strip, halo channel and
 // the height it keeps on image A and B (shrinking from its top like a clock digit).
@@ -221,9 +225,9 @@ vec2 clockColumns(int ci, vec2 cp, vec4 T, vec4 B, vec4 sq, float stk) {
     if (stk < 0.5) {
         vec4 b1 = ci == 0 ? uDigA[1] : uDigB[1]; vec4 b2 = ci == 0 ? uDigA[2] : uDigB[2];
         float f = min(sq[1], sq[2]);
-        float g = (b1.w - b1.y) * 0.32;
+        vec2 g = glowReach(b1, ci == 0 ? uCkAsp.x : uCkAsp.y);
         float t = min(T[1], T[2]); float bt = max(B[1], B[2]);
-        if (b2.x < 1.5 && f < 0.999 && cp.x > b1.z - g && cp.x < b2.x + g && cp.y > t && cp.y < bt + g) {
+        if (b2.x < 1.5 && f < 0.999 && cp.x > b1.z - g.x && cp.x < b2.x + g.x && cp.y > t && cp.y < bt + g.y) {
             vec2 p = colShrink(cp, t, bt, f);
             vec4 v = clockTex4(ci, p) * inUnit(p).x;
             if (cp.x > b1.z && cp.x < b2.x) r = p.y <= bt ? v.r : 0.0;
@@ -236,8 +240,8 @@ vec2 clockColumns(int ci, vec2 cp, vec4 T, vec4 B, vec4 sq, float stk) {
         vec4 box = ci == 0 ? uDigA[d] : uDigB[d];
         if (box.x > 1.5) continue;             // no such digit
         int c = stk > 0.5 ? d - (d / 2) * 2 : d;
-        float g = (box.w - box.y) * 0.32;      // how far this digit's glow reaches (all of it, even at full shadow)
-        if (cp.x < box.x - g || cp.x > box.z + g || cp.y < T[c] - g || cp.y > B[c] + g) continue;
+        vec2 g = glowReach(box, ci == 0 ? uCkAsp.x : uCkAsp.y);   // all of its glow, even at full shadow
+        if (cp.x < box.x - g.x || cp.x > box.z + g.x || cp.y < T[c] - g.y || cp.y > B[c] + g.y) continue;
         vec2 p = colShrink(cp, T[c], B[c], sq[c]);
         if (!inBox(p, vec4(box.xy - g, box.zw + g))) continue;
         vec4 v = clockTex4(ci, p);
@@ -266,7 +270,7 @@ vec2 clockMorph(vec2 pos, float t) {
     if (any(lessThan(pos, lo - pad)) || any(greaterThan(pos, hi + pad))) return acc;
     bool srcB = uLay.y < 0.5;                   // the horizontal one
     vec4 d0 = srcB ? uDigB[0] : uDigA[0];
-    float g = (d0.w - d0.y) * 0.32;             // glow reach, in the source texture
+    vec2 g0 = glowReach(d0, 1.0);               // glow reach down; across depends on the texture sampled
     float tTop = min(d0.y, (srcB ? uDigB[3] : uDigA[3]).y); float tBot = max(d0.w, (srcB ? uDigB[3] : uDigA[3]).w);
     for (int k = 0; k < 6; k++) {
         // 0..3 digits, 4 date, 5 colon
@@ -291,6 +295,7 @@ vec2 clockMorph(vec2 pos, float t) {
         float fy = mix(fa, fb, t);
         bool useB = hasB && (srcB || !hasA);
         vec4 src = useB ? bb : ba;
+        vec2 g = vec2(g0.y / (useB ? uCkAsp.y : uCkAsp.x), g0.y);
         vec2 sc = (src.zw - src.xy) / max(s.zw - s.xy, vec2(1e-5));
         // Across the glyph box: stretched to fit; above and below it (the glow): at the unshrunk scale.
         vec2 q;

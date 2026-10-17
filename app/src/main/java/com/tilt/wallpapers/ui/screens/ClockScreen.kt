@@ -495,12 +495,15 @@ private fun EditablePreview(
                                 work = when (mode) {
                                     1 -> work.copy(h = (work.h + (dx * sxSign / w * work.h / bwNow + dy * sySign / h) * 2f).coerceIn(0.04f, 0.85f), auto = false)
                                     2 -> {
-                                        val nb = (bwNow + 2f * sxSign * dx / w).coerceIn(maxOf(0.06f, bwNow / work.sx * 0.4f), minOf(0.98f, bwNow / work.sx * 3f))
+                                        // Wider / narrower, never past the screen. (A wide clock touching both edges made this range
+                                        // empty, which threw and closed the app.)
+                                        val natural = bwNow / work.sx
+                                        val nb = (bwNow + 2f * sxSign * dx / w).safeIn(maxOf(0.06f, natural * 0.2f), minOf(0.98f, natural * 3f))
                                         work.copy(sx = (work.sx * nb / bwNow).coerceIn(0.2f, 3f), auto = false)
                                     }
                                     else -> {
                                         // Taller with the width kept: up to five times the font's own height, 96% of the screen.
-                                        val nh = (work.h + 2f * sySign * dy / h).coerceIn(maxOf(0.04f, work.h * work.sx / 3f), minOf(0.96f, work.h * work.sx / 0.2f))
+                                        val nh = (work.h + 2f * sySign * dy / h).safeIn(maxOf(0.04f, work.h * work.sx / 3f), minOf(0.96f, work.h * work.sx / 0.2f))
                                         work.copy(h = nh, sx = (work.sx * work.h / nh).coerceIn(0.2f, 3f), auto = false)
                                     }
                                 }
@@ -586,6 +589,9 @@ private fun NudgeCard(tg: EditTarget) {
         SliderRow(t("Cỡ"), p.h, 0.04f..0.85f, { "${(it * 100).roundToInt()}%" }) { v -> go { it.copy(h = v) } }
     }
 }
+
+/** [coerceIn] that never throws: when the limits cross (min > max), the max wins. */
+private fun Float.safeIn(min: Float, max: Float) = if (min > max) max else coerceIn(min, max)
 
 /** An object's box on screen (l, t, r, b as fractions). */
 private fun frameBox(p: ClockPlacement, shape: ClockText.Shape, aspect: Float): FloatArray {

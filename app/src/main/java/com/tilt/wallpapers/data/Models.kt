@@ -253,6 +253,10 @@ data class Settings(
     val customColors: List<Int> = emptyList(),
     /** Motion when the screen turns on / the phone unlocks. */
     val unlockAnim: UnlockAnim = UnlockAnim.LIGHT,
+    /** It plays once per wake: when the screen turns on (Tilt on the lock screen too) or at the unlock. */
+    val unlockOnWake: Boolean = true,
+    /** How long the motion lasts (seconds): the blur clears over this time. */
+    val unlockSeconds: Float = 1.6f,
     /** "Xem trước" opens with its buttons hidden ("Ẩn giao diện"). */
     val previewHideUi: Boolean = false,
 )

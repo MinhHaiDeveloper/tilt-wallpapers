@@ -411,7 +411,9 @@ class TiltRenderer(private val maxTexture: Int) : GlScene {
     fun playUnlock(force: Boolean = false) = host.post {
         val now = System.nanoTime()
         if (!force && now - lastUnlock < 1_500_000_000L) return@post
-        lastUnlock = now; unlockStart = now
+        // The clock starts at the first frame actually drawn: the display is still waking up when this comes,
+        // and counting from here let the first part (the blur) pass unseen, so it looked like a pop.
+        lastUnlock = now; unlockStart = -1L
         host.requestRender()
     }
     private var lastUnlock = 0L
@@ -538,13 +540,17 @@ class TiltRenderer(private val maxTexture: Int) : GlScene {
         }
         if (unlockStart != 0L) {
             // Screen on / unlocked: the picture settles from a little zoomed and blurred, the subject first.
-            val u = (frameTimeNanos - unlockStart) / 600_000_000f
+            if (unlockStart == -1L) unlockStart = frameTimeNanos + UNLOCK_HOLD
+            // Held fully blurred for a moment first (the screen's own fade-in), then the motion.
+            val u = ((frameTimeNanos - unlockStart) / (cfg.unlockSeconds.coerceIn(0.5f, 3f) * 1e9f)).coerceAtLeast(0f)
             val amt = if (env.lowPower || env.reduceMotion) 0f else cfg.unlockAnim.amount
-            if (u >= 1f || amt == 0f || u < 0f) { unlockStart = 0L; unlockBg = 0f; unlockFg = 0f; unlockBlur = 0f; typeZoom = 1f }
+            if (u >= 1f || amt == 0f) { unlockStart = 0L; unlockBg = 0f; unlockFg = 0f; unlockBlur = 0f; typeZoom = 1f }
             else {
                 fun out(x: Float) = 1f - (1f - x.coerceIn(0f, 1f)).pow(3)
-                val kb = out(u); val ks = out(u / 0.6f)
-                unlockBg = amt * 0.08f * (1f - kb); unlockBlur = amt * 3f * (1f - kb)
+                // Zoom settles quickly; the blur clears evenly over the whole motion (eased out it was gone
+                // almost at once).
+                val kb = out(u); val ks = out(u / 0.6f); val kc = u * u * (3f - 2f * u)
+                unlockBg = amt * 0.08f * (1f - kb); unlockBlur = amt * 3f * (1f - kc)
                 unlockFg = amt * 0.05f * (1f - ks); typeZoom = 1f + amt * 0.06f * (1f - kb)
                 more = true
             }
@@ -1023,5 +1029,6 @@ class TiltRenderer(private val maxTexture: Int) : GlScene {
     private companion object {
         const val TAG = "TiltRenderer"
         const val MAX_TEXTURES = 5
+        const val UNLOCK_HOLD = 120_000_000L
     }
 }

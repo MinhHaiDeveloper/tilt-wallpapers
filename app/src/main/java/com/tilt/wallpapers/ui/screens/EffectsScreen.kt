@@ -241,6 +241,19 @@ fun EffectsScreen() {
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 14.dp),
                 )
+                if (s.unlockAnim != com.tilt.wallpapers.data.UnlockAnim.OFF) {
+                    SliderRow(t("Thời gian"), s.unlockSeconds, 0.6f..3f, { "%.1f s".format(it) },
+                        onFinished = { Repo.previewUnlock() }) { v -> update { it.copy(unlockSeconds = (v * 10).roundToInt() / 10f) } }
+                    Text(t("Chạy khi"), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 20.dp, top = 8.dp, bottom = 8.dp))
+                    com.tilt.wallpapers.ui.components.SegmentedPicker(listOf(true, false), s.unlockOnWake, { if (it) t("Bật màn hình") else t("Mở khóa") },
+                        Modifier.padding(horizontal = 16.dp)) { v -> update { it.copy(unlockOnWake = v) } }
+                    Text(
+                        if (s.unlockOnWake) t("Chạy một lần ngay khi bật màn hình. Hợp khi màn hình khóa cũng dùng Tilt.")
+                        else t("Chạy một lần lúc mở khóa vào màn hình chính. Hợp khi màn hình khóa dùng ảnh khác."),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 14.dp),
+                    )
+                }
             }
         }
         item { SectionTitle(t("Chuyển cảnh khi nghiêng")) }

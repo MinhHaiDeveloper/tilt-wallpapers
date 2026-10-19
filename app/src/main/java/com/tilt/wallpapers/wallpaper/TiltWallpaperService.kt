@@ -58,9 +58,19 @@ class TiltWallpaperService : WallpaperService() {
 
         private val powerReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                if (intent.action == Intent.ACTION_USER_PRESENT) renderer.playUnlock()
-                if (intent.action == Intent.ACTION_SCREEN_OFF) screenWasOff = true
-                if (intent.action == Intent.ACTION_USER_PRESENT || intent.action == Intent.ACTION_SCREEN_OFF) refreshLock() else refreshEnv()
+                if (intent.action == Intent.ACTION_USER_PRESENT) onUnlocked()
+                // Some phones (ColorOS) keep the wallpaper "visible" while the screen is off: no visibility change
+                // comes either way. So the tilt sensor stops with the screen (it kept running, draining the
+                // battery), and the screen-on broadcast restarts it and plays the motion.
+                if (intent.action == Intent.ACTION_SCREEN_OFF) { screenWasOff = true; playedThisWake = false; sensor.stop() }
+                if (intent.action == Intent.ACTION_SCREEN_ON && visibleNow) {
+                    sensor.start(); renderer.snap(); gl.requestRender()
+                    if (screenWasOff) { screenWasOff = false; onScreenOn() }
+                }
+                when (intent.action) {
+                    Intent.ACTION_USER_PRESENT, Intent.ACTION_SCREEN_OFF, Intent.ACTION_SCREEN_ON -> refreshLock()
+                    else -> refreshEnv()
+                }
             }
         }
 
@@ -71,13 +81,40 @@ class TiltWallpaperService : WallpaperService() {
          */
         private var visibleNow = false
         private var screenWasOff = true
+        private var wasLocked = false
         private val lockPoll = Runnable { refreshLock() }
         private fun refreshLock() {
             main.removeCallbacks(lockPoll)
             val km = applicationContext.getSystemService(android.app.KeyguardManager::class.java)
             val locked = km?.isKeyguardLocked == true
             renderer.setLocked(locked)
+            // The poll also catches the unlock itself where its broadcast is late or missing.
+            if (wasLocked && !locked) onUnlocked()
+            wasLocked = locked
             if (locked && visibleNow) main.postDelayed(lockPoll, 500)
+        }
+
+        /**
+         * Unlock motion, once per wake. "Khi bật màn hình": as the screen turns on (on the lock screen, if that
+         * shows Tilt; with no lock it is the home screen anyway). "Khi mở khóa": as the lock screen goes away, for
+         * phones whose lock screen shows another picture. A fingerprint unlock straight from the off screen sends
+         * both moments together: still one motion.
+         */
+        private var playedThisWake = false
+        private fun onScreenOn() {
+            val km = applicationContext.getSystemService(android.app.KeyguardManager::class.java)
+            val locked = km?.isKeyguardLocked == true
+            if (locked && !Repo.state.value.settings.unlockOnWake) return     // waits for the unlock
+            renderer.playUnlock(force = true)
+            playedThisWake = true
+        }
+        /** This phone sends "lock screen going away": the late broadcasts no longer start the motion. */
+        private var goingAwaySeen = false
+        private fun onUnlocked(exact: Boolean = false) {
+            if (!exact && goingAwaySeen) return
+            if (playedThisWake) return
+            renderer.playUnlock(force = true)
+            playedThisWake = true
         }
 
         private fun refreshEnv() {
@@ -106,7 +143,7 @@ class TiltWallpaperService : WallpaperService() {
                 applicationContext, powerReceiver,
                 IntentFilter().apply {
                     addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED); addAction(Intent.ACTION_POWER_CONNECTED); addAction(Intent.ACTION_POWER_DISCONNECTED)
-                    addAction(Intent.ACTION_USER_PRESENT); addAction(Intent.ACTION_SCREEN_OFF)
+                    addAction(Intent.ACTION_USER_PRESENT); addAction(Intent.ACTION_SCREEN_OFF); addAction(Intent.ACTION_SCREEN_ON)
                 },
                 ContextCompat.RECEIVER_NOT_EXPORTED,
             )
@@ -116,6 +153,19 @@ class TiltWallpaperService : WallpaperService() {
             super.onSurfaceChanged(holder, format, width, height)
             if (attached) gl.resize(width, height) else gl.attach(holder.surface, width, height)
             attached = true
+        }
+
+        /**
+         * The system tells the wallpaper the exact moments: waking up, and the lock screen starting to go away
+         * (the unlock animation). The broadcasts come later (the unlock one about a second after the home screen
+         * shows, so the motion played on a picture already settled) and stay only as a fallback.
+         */
+        override fun onCommand(action: String?, x: Int, y: Int, z: Int, extras: android.os.Bundle?, resultRequested: Boolean): android.os.Bundle? {
+            when (action) {
+                "android.wallpaper.wakingup" -> if (screenWasOff) { screenWasOff = false; onScreenOn() }
+                "android.wallpaper.keyguardgoingaway" -> { goingAwaySeen = true; onUnlocked(exact = true) }
+            }
+            return super.onCommand(action, x, y, z, extras, resultRequested)
         }
 
         override fun onSurfaceDestroyed(holder: SurfaceHolder) {
@@ -136,7 +186,7 @@ class TiltWallpaperService : WallpaperService() {
                 sensor.start()
                 renderer.snap()
                 // Screen turned on (not just back from an app): the unlock motion.
-                if (screenWasOff) { screenWasOff = false; renderer.playUnlock() }
+                if (screenWasOff) { screenWasOff = false; onScreenOn() }
                 gl.requestRender()
                 main.removeCallbacks(tick)
                 main.postDelayed(tick, Automation.msToNextMinute())

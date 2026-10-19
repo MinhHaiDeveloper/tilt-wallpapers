@@ -155,6 +155,8 @@ fun SliderRow(
     format: (Float) -> String,
     enabled: Boolean = true,
     steps: Int = 0,
+    /** When the finger lets go. */
+    onFinished: (() -> Unit)? = null,
     onChange: (Float) -> Unit,
 ) {
     val hf = LocalHapticFeedback.current
@@ -166,7 +168,7 @@ fun SliderRow(
         Slider(
             value = value,
             onValueChange = { onChange(it) },
-            onValueChangeFinished = { hf.performHapticFeedback(HapticFeedbackType.GestureEnd) },
+            onValueChangeFinished = { hf.performHapticFeedback(HapticFeedbackType.GestureEnd); onFinished?.invoke() },
             valueRange = range,
             steps = steps,
             enabled = enabled,

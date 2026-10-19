@@ -40,7 +40,8 @@ class TiltRenderer(private val maxTexture: Int) : GlScene {
 
     /** Shows [setId] (or the active set) from [state]. */
     /** Conditions outside the app's settings that change how the wallpaper behaves. */
-    data class Env(val lowPower: Boolean = false, val reduceMotion: Boolean = false, val dim: Float = 0f)
+    /** [lowPower]: battery saver on (level 3 while it lasts); [thermal]: PowerManager thermal status. */
+    data class Env(val lowPower: Boolean = false, val reduceMotion: Boolean = false, val dim: Float = 0f, val thermal: Int = 0)
     @Volatile private var env = Env()
     @Volatile private var lastState: AppState? = null
     @Volatile private var lastSetId: String? = null
@@ -48,17 +49,78 @@ class TiltRenderer(private val maxTexture: Int) : GlScene {
     fun setEnv(e: Env) {
         if (e == env) return
         env = e
-        host.minFrameNanos = if (e.lowPower) 33_000_000L else 0L
-        host.post { dimTarget = e.dim }
+        host.post { dimTarget = e.dim; applyLevel() }
         lastState?.let { setState(it, lastSetId) }
         host.requestRender()
     }
 
-    /** Settings as they apply now: battery saver and "remove animations" turn motion down. */
+    // ---------------------------------------------------------------- performance level
+    /**
+     * "Chế độ hiệu năng". Levels: 0 full; 1 low (60 fps cap, fewer readings, fewer blur taps); 2 medium (30 fps,
+     * half the motion, no unlock motion); 3 high (no motion or glass, plain short transitions); 4 still (sensor off,
+     * the middle picture). Automatic: 0, lowered while frames run late or the phone is hot, never past 2.
+     * Battery saver: at least 3 while it lasts (its own switch, same handling).
+     */
+    @Volatile private var manualLevel = -1          // -1 = automatic
+    @Volatile private var autoLevel = 0
+    @Volatile var level = 0; private set
+    /** Told (on the GL thread) whenever the level changes, e.g. to set the sensor's rate. */
+    var onLevel: ((Int) -> Unit)? = null
+
+    private fun computeLevel(): Int {
+        val base = if (manualLevel >= 0) manualLevel else maxOf(autoLevel, when {
+            env.thermal >= 3 -> 2                                           // severe and up
+            env.thermal >= 2 -> 1                                           // moderate
+            else -> 0
+        })
+        return maxOf(base, if (env.lowPower) 3 else 0)
+    }
+
+    /** Recomputes the level; on a change: frame cap, sensor, and the settings it shapes. GL thread. */
+    private fun applyLevel() {
+        val l = computeLevel()
+        if (l == level) return
+        val crossed = (l >= 3) != (level >= 3) || (l == 4) != (level == 4)
+        level = l
+        host.minFrameNanos = when (l) { 0 -> 0L; 1 -> 16_000_000L; else -> 33_000_000L }
+        onLevel?.invoke(l)
+        lagFrames = 0; lagLate = 0; lagWindow = 0f; lagBase = 1f; stableFor = 0f
+        if (crossed) lastState?.let { setState(it, lastSetId) }
+        host.requestRender()
+    }
+
+    // Automatic: frames that run late while animating, measured over 2-second windows.
+    private var lagFrames = 0; private var lagLate = 0; private var lagWindow = 0f; private var lagBase = 1f
+    private var stableFor = 0f
+    private var wasAnimating = false
+    private fun watchFrames(dt: Float, animating: Boolean) {
+        if (manualLevel >= 0) return
+        if (wasAnimating && animating && dt > 0f) {
+            // Expected: the fastest frame seen lately, or the cap of the current level.
+            lagBase = minOf(lagBase, dt).coerceAtLeast(0.0055f)
+            val expected = maxOf(lagBase, host.minFrameNanos / 1e9f)
+            lagFrames++; if (dt > expected * 1.6f) lagLate++
+        }
+        wasAnimating = animating
+        lagWindow += dt
+        if (lagWindow < 2f) return
+        val ratio = if (lagFrames > 0) lagLate.toFloat() / lagFrames else 0f
+        if (lagFrames >= 20 && ratio > 0.2f && autoLevel < 2) { autoLevel++; stableFor = 0f; applyLevel() }
+        else {
+            stableFor = if (ratio < 0.05f) stableFor + lagWindow else 0f
+            if (stableFor >= 5f && autoLevel > 0) { autoLevel--; stableFor = 0f; applyLevel() }
+        }
+        lagFrames = 0; lagLate = 0; lagWindow = 0f
+    }
+    /** Eased toward the level: motion (parallax, rotation, clock drift) and glass, so changes fade in ~0.3 s. */
+    private var motionK = 1f
+    private var glassK = 1f
+
+    /** Settings as they apply now: high levels, battery saver and "remove animations" turn motion down. */
     private fun effective(st: Settings): Settings {
         var s = st
-        if (env.lowPower || env.reduceMotion) s = s.copy(parallax = false, rotateSubject = false)
-        if (env.reduceMotion) s = s.copy(transition = Transition.CROSSFADE, durationMs = minOf(s.durationMs, 250), followTilt = false)
+        if (env.reduceMotion) s = s.copy(parallax = false, rotateSubject = false)
+        if (env.reduceMotion || computeLevel() >= 3) s = s.copy(transition = Transition.CROSSFADE, durationMs = minOf(s.durationMs, 250), followTilt = false)
         return s
     }
 
@@ -66,16 +128,19 @@ class TiltRenderer(private val maxTexture: Int) : GlScene {
         lastState = state; lastSetId = setId
         val set = setId?.let { id -> state.sets.find { it.id == id } } ?: state.activeSet
         val (seq, neutral) = set?.tiltSequence() ?: (emptyList<WallImage>() to 0)
+        manualLevel = if (state.settings.perfAuto) -1 else listOf(0, 2, 3, 4)[state.settings.perfStep.coerceIn(0, 3)]
         val st = effective(state.settings)
+        // "Ảnh tĩnh": the middle picture, tilt not read at all.
+        val still = computeLevel() >= 4
         // Unlocking re-reads the current angle inside configure(), so the picture glides to where the phone points.
-        synchronized(nav) { nav.locked = st.tiltLock; nav.configure(seq.size, neutral, st.tiltMode, st.tiltRange) }
-        val target = nav.index
+        synchronized(nav) { nav.locked = st.tiltLock || still; nav.configure(seq.size, neutral, st.tiltMode, st.tiltRange) }
+        val target = if (still) neutral else nav.index
         settings = st
         clockStyle = set?.clock ?: com.tilt.wallpapers.data.ClockStyle()
         textLayer = set?.texts ?: com.tilt.wallpapers.data.TextLayer()
         clockShowOn = state.settings.clockShowOn
         clockAuto = Repo.centerImage(state.copy(activeSetId = set?.id ?: state.activeSetId))?.palette?.firstOrNull()?.let { lightTint(it) } ?: 0xFFF2F2F2.toInt()
-        host.post { neutralIdx = neutral; applyConfig(seq, st, target) }
+        host.post { neutralIdx = neutral; applyConfig(seq, st, target); applyLevel() }
         host.requestRender()
     }
 
@@ -313,7 +378,7 @@ class TiltRenderer(private val maxTexture: Int) : GlScene {
     /** Drift and "Khi chuyển ảnh" of the clock, shared by the free texts. */
     private fun bindTypeMisc(p: Program) {
         val st = clockStyle
-        val amp = if (env.lowPower || env.reduceMotion) 0f else st.depth * 0.05f
+        val amp = if (env.reduceMotion) 0f else st.depth * 0.05f * motionK
         glUniform3f(p.u("uClockMisc"), -tiltX * amp, -tiltY * amp * 0.7f, if (st.followImage) 1f else 0f)
     }
 
@@ -508,7 +573,16 @@ class TiltRenderer(private val maxTexture: Int) : GlScene {
     }
 
     override fun onDraw(frameTimeNanos: Long): Boolean {
+        val more = drawScene(frameTimeNanos)
+        watchFrames(frameDt, more)
+        return more
+    }
+    private var frameDt = 0f
+
+    private fun drawScene(frameTimeNanos: Long): Boolean {
         if (quad == 0) initGl()
+        // Unclamped interval for the lag watch (a late frame is what it looks for).
+        frameDt = if (lastFrame == 0L) 0f else ((frameTimeNanos - lastFrame) / 1e9f).coerceIn(0f, 1f)
         val dt = if (lastFrame == 0L) 0.016f else ((frameTimeNanos - lastFrame) / 1e9f).coerceIn(0f, 0.1f)
         lastFrame = frameTimeNanos
         var more = false
@@ -516,6 +590,14 @@ class TiltRenderer(private val maxTexture: Int) : GlScene {
         // Critically-damped follow of the sensor: smooth at any refresh rate.
         // Smoothing 0..1 maps to a follow rate of 18..4.5 per second (9 at the default 0.5).
         val k = 1f - exp(-dt * 9f * 2f.pow(1f - 2f * cfg.smoothing))
+        // Motion and glass follow the level smoothly.
+        val motionT = when { level <= 1 -> 1f; level == 2 -> 0.5f; else -> 0f }
+        val glassT = if (level >= 3) 0f else 1f
+        if (abs(motionK - motionT) > 0.002f || abs(glassK - glassT) > 0.002f) {
+            motionK += (motionT - motionK).coerceIn(-dt / 0.3f, dt / 0.3f)
+            glassK += (glassT - glassK).coerceIn(-dt / 0.3f, dt / 0.3f)
+            more = true
+        } else { motionK = motionT; glassK = glassT }
         if (abs(dimTarget - dimNow) > 0.002f) {
             dimNow += (dimTarget - dimNow).coerceIn(-dt / 2f, dt / 2f)   // full range in ~2 s
             more = true
@@ -543,7 +625,7 @@ class TiltRenderer(private val maxTexture: Int) : GlScene {
             if (unlockStart == -1L) unlockStart = frameTimeNanos + UNLOCK_HOLD
             // Held fully blurred for a moment first (the screen's own fade-in), then the motion.
             val u = ((frameTimeNanos - unlockStart) / (cfg.unlockSeconds.coerceIn(0.5f, 3f) * 1e9f)).coerceAtLeast(0f)
-            val amt = if (env.lowPower || env.reduceMotion) 0f else cfg.unlockAnim.amount
+            val amt = if (level >= 2 || env.reduceMotion) 0f else cfg.unlockAnim.amount
             if (u >= 1f || amt == 0f) { unlockStart = 0L; unlockBg = 0f; unlockFg = 0f; unlockBlur = 0f; typeZoom = 1f }
             else {
                 fun out(x: Float) = 1f - (1f - x.coerceIn(0f, 1f)).pow(3)
@@ -707,7 +789,8 @@ class TiltRenderer(private val maxTexture: Int) : GlScene {
         val clockOn = !stills && ensureClock()
         val textOn = !stills && textGl.ensure(textLayer, seq, height)
         val clock = (clockOn || textOn) && clockVis > 0.001f
-        val p = program(st.effect, if (b != null) st.transition else null, depth, clock)
+        // Glass faded out (high levels): the plain program, which costs less.
+        val p = program(if (glassK < 0.01f) Effect.ORIGINAL else st.effect, if (b != null) st.transition else null, depth, clock)
         glUseProgram(p.id)
 
         val rotateMode = st.rotateSubject && !st.parallax
@@ -720,17 +803,19 @@ class TiltRenderer(private val maxTexture: Int) : GlScene {
         val fgShift = if (st.parallax && !st.rotateSubject) 1.9f else 0f
         layout.scale = scale
         layout.fgScale = (if (rotateMode) 1.2f else 1f) / (1f + unlockFg)
-        layout.shiftX = -tiltX * margin * scale * fgShift
-        layout.shiftY = -tiltY * margin * scale * fgShift
-        layout.angle = if (rotateMode) tiltX * 0.35f else 0f
+        // Lighter levels keep the layout (no jump) and scale the motion down.
+        layout.shiftX = -tiltX * margin * scale * fgShift * motionK
+        layout.shiftY = -tiltY * margin * scale * fgShift * motionK
+        layout.angle = if (rotateMode) tiltX * 0.35f * motionK else 0f
 
         bindImage(p, 0, a, ta, isA = true)
         if (b != null && tb != null) bindImage(p, 2, b, tb, isA = false)
 
-        glUniform3f(p.u("uBg"), -tiltX * margin * scale, -tiltY * margin * scale, scale / (1f + unlockBg))
+        glUniform3f(p.u("uBg"), -tiltX * margin * scale * motionK, -tiltY * margin * scale * motionK, scale / (1f + unlockBg))
         glUniform2f(p.u("uRes"), width.toFloat(), height.toFloat())
         glUniform2f(p.u("uTilt"), tiltX, tiltY)
-        glUniform1f(p.u("uStrength"), st.effectStrength)
+        glUniform1f(p.u("uStrength"), st.effectStrength * glassK)
+        glUniform1f(p.u("uTaps"), if (level >= 1) 4f else 8f)
         glUniform1f(p.u("uProgress"), progress)
         glUniform2f(p.u("uDir"), dir[0], dir[1])
         glUniform1f(p.u("uDim"), dimNow)

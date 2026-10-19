@@ -24,22 +24,30 @@ class TiltSensor(context: Context, private val onTilt: (roll: Float, pitch: Floa
     private var primed = false
     private var running = false
 
-    private var rate = SensorManager.SENSOR_DELAY_GAME
+    /** Microseconds between readings. */
+    private var rate = 20_000
+    /** "Ảnh tĩnh": no readings at all until a lighter level. */
+    private var paused = false
 
     fun start() {
-        if (running || sensor == null) return
+        if (running || sensor == null || paused) return
         running = true
         primed = false
         // Delivered on a background thread: readings never queue up behind the UI's frames (or delay them).
         sm.registerListener(this, sensor, rate, handler)
     }
 
-    /** Fewer readings when saving battery; restarts the listener if the rate changed. */
-    fun setLowPower(low: Boolean) {
-        val r = if (low) SensorManager.SENSOR_DELAY_UI else SensorManager.SENSOR_DELAY_GAME
-        if (r == rate) return
-        rate = r
-        if (running) { stop(); start() }
+    /**
+     * Readings for a performance level (0 full … 4 still): fewer as it lightens, none at all for 4. Restarts
+     * the listener if the rate changed. [wanted]: whether it should run now (the wallpaper shows).
+     */
+    fun setLevel(level: Int, wanted: Boolean) {
+        val r = when (level) { 0 -> 20_000; 1 -> 25_000; 2 -> 33_000; else -> 66_000 }
+        val p = level >= 4
+        if (r == rate && p == paused) return
+        rate = r; paused = p
+        stop()
+        if (wanted) start()
     }
 
     fun stop() {

@@ -92,6 +92,10 @@ fun SettingsScreen() {
                 ) { v -> Repo.updateSettings { it.copy(theme = v) } }
                 Spacer(Modifier.height(8.dp))
                 ThemeColorSection(state)
+                // Glass of bars and buttons: frosted at the right, clearer (bending at the edges) to the left.
+                SliderRow(t("Độ mờ của kính"), s.glassFrost, 0f..1f, {
+                    when { it < 0.2f -> t("Trong"); it < 0.45f -> t("Hơi trong"); it < 0.75f -> t("Vừa"); else -> t("Mờ") }
+                }) { v -> Repo.updateSettings { it.copy(glassFrost = v) } }
                 Text(t("Ngôn ngữ · Language"), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 8.dp))
                 Segmented(
                     options = com.tilt.wallpapers.data.AppLanguage.entries,
@@ -155,6 +159,9 @@ fun SettingsScreen() {
 
         item { SectionTitle(t("Tự động")) }
         item { ScheduleCard(state) }
+
+        item { SectionTitle(t("Chế độ hiệu năng")) }
+        item { PerformanceCard(state) }
 
         item { SectionTitle(t("Pin & ban đêm")) }
         item { PowerNightCard(state) }

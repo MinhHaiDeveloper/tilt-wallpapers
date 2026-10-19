@@ -49,6 +49,7 @@ uniform float uProgress; // transition 0..1 (eased)
 uniform vec2 uDir;       // transition direction (unit, y-down)
 uniform float uDim;      // night dimming 0..1
 uniform vec4 uFold;      // Gập: next picture's starting shade, blur strength, blur onset, free-edge see-through
+uniform float uTaps;     // blur taps in a transition (8; 4 when lightened)
 
 const float PI = 3.14159265;
 
@@ -624,9 +625,10 @@ void main() {
         float spin = 0.0;                                 // fixed pattern: smooth, no grain
         for (int i = 0; i < 8; i++) {
             float fi = float(i);
+            if (fi >= uTaps) break;
             float a = spin + fi * 2.3999632;                // golden angle
-            float r = sqrt((fi + 0.5) / 8.0);
-            panel += IMG_A(ua + vec2(cos(a), sin(a)) * r * rad, disp) * 0.1;
+            float r = sqrt((fi + 0.5) / uTaps);
+            panel += IMG_A(ua + vec2(cos(a), sin(a)) * r * rad, disp) * (0.8 / uTaps);
         }
     } else panel *= 5.0;
     gClockOn = true;
@@ -669,9 +671,10 @@ void main() {
             float spin = 0.4;
             for (int i = 0; i < 8; i++) {
                 float fi = float(i);
+                if (fi >= uTaps) break;
                 float a = spin + fi * 2.3999632;
-                float r = sqrt((fi + 0.5) / 8.0);
-                under += IMG_B(uv + vec2(cos(a), sin(a)) * r * rad, disp) * 0.1;
+                float r = sqrt((fi + 0.5) / uTaps);
+                under += IMG_B(uv + vec2(cos(a), sin(a)) * r * rad, disp) * (0.8 / uTaps);
             }
             under = mix(under, underCkCol, underCkVis);
         } else under *= 5.0;

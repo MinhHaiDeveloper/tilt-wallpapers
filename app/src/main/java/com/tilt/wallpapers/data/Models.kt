@@ -257,6 +257,12 @@ data class Settings(
     val unlockOnWake: Boolean = true,
     /** How long the motion lasts (seconds): the blur clears over this time. */
     val unlockSeconds: Float = 1.6f,
+    /** "Chế độ hiệu năng": lighten only when the phone struggles (automatic), or always at [perfStep]. */
+    val perfAuto: Boolean = true,
+    /** Manual step 0..3: Đầy đủ, Nhẹ, Rất nhẹ, Ảnh tĩnh (levels 0, 2, 3, 4). */
+    val perfStep: Int = 0,
+    /** Glass surfaces: 1 = frosted (as before), 0 = the clearest allowed (never see-through). */
+    val glassFrost: Float = 0.5f,
     /** "Xem trước" opens with its buttons hidden ("Ẩn giao diện"). */
     val previewHideUi: Boolean = false,
 )

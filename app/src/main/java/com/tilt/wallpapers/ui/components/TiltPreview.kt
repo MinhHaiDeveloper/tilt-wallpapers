@@ -28,6 +28,9 @@ private class PreviewEngine(context: Context) : TextureView.SurfaceTextureListen
     val renderer = TiltRenderer(maxTexture = 1440)
     val gl = GlThread("tilt-preview", renderer).also { renderer.host = it }
     val sensor = TiltSensor(context) { roll, pitch -> renderer.onTilt(roll, pitch) }
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    @Volatile var sensing = false
+    init { renderer.onLevel = { l -> main.post { sensor.setLevel(l, sensing) } } }
 
     override fun onSurfaceTextureAvailable(st: SurfaceTexture, w: Int, h: Int) { gl.attach(st, w, h) }
     override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, w: Int, h: Int) { gl.resize(w, h) }
@@ -56,8 +59,8 @@ fun TiltPreview(
     val state by Repo.state.collectAsStateWithLifecycle()
     LaunchedEffect(override ?: state, setId) { engine.renderer.setState(override ?: state, setId) }
     LifecycleResumeEffect(engine, tilt) {
-        if (tilt) engine.sensor.start()
-        onPauseOrDispose { engine.sensor.stop() }
+        if (tilt) { engine.sensing = true; engine.sensor.start() }
+        onPauseOrDispose { engine.sensing = false; engine.sensor.stop() }
     }
     DisposableEffect(engine) { onDispose { engine.release() } }
     LaunchedEffect(engine) { Repo.commands.collect { if (it == Repo.Command.PREVIEW_UNLOCK) engine.renderer.playUnlock(force = true) } }

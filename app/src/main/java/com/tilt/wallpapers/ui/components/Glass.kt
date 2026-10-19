@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -66,6 +67,64 @@ import kotlinx.coroutines.launch
 
 /** The blur source for glass surfaces drawn above the current screen. */
 val LocalHaze = staticCompositionLocalOf<HazeState?> { null }
+
+/** "Độ mờ của kính": 1 frosted, 0 the clearest allowed. */
+val LocalGlassFrost = staticCompositionLocalOf { 0.5f }
+
+/**
+ * The glass's backdrop (AGSL, Android 13+). Refraction: near the rim the picture behind bends inward and is
+ * magnified, like the edge of a lens or a drop of water, with a hint of colour split and a highlight on the
+ * edges facing the light. Contrast: wherever the picture behind would fight the text on the glass (bright under
+ * white text on a dark theme, dark under black text on a light one), that spot alone is toned down / lifted
+ * just enough to read; elsewhere the glass stays as clear as set.
+ */
+private const val REFRACTION = """
+uniform shader content;
+uniform float2 size;
+uniform float radius;
+uniform float band;
+uniform float strength;
+uniform float adapt;
+float sdRound(float2 p, float2 b, float r) {
+    float2 q = abs(p) - b + r;
+    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+}
+half4 main(float2 xy) {
+    float2 c = size * 0.5;
+    float2 p = xy - c;
+    float d = -sdRound(p, c, radius);
+    half4 col;
+    if (d >= band || strength <= 0.0) {
+        col = content.eval(xy);
+    } else {
+        float2 g = float2(sdRound(p + float2(1.0, 0.0), c, radius) - sdRound(p - float2(1.0, 0.0), c, radius),
+                          sdRound(p + float2(0.0, 1.0), c, radius) - sdRound(p - float2(0.0, 1.0), c, radius));
+        float2 n = normalize(g + float2(1e-5, 1e-5));
+        float t = 1.0 - clamp(d / band, 0.0, 1.0);
+        float k = t * t * strength * band * 0.6;
+        col = content.eval(xy - n * k);
+        col.r = content.eval(xy - n * k * 1.07).r;
+        col.b = content.eval(xy - n * k * 0.93).b;
+        float spec = t * t * t * max(0.0, dot(n, normalize(float2(-1.0, -1.0)))) * 0.32 * strength;
+        col.rgb += half3(spec) * col.a;
+    }
+    if (col.a > 0.0 && adapt != 0.0) {
+        half3 rgb = col.rgb / col.a;
+        float l = dot(rgb, half3(0.299, 0.587, 0.114));
+        if (adapt > 0.0 && l > 0.5) {
+            // Dark theme, white text: anything brighter than 0.5 is squeezed down toward it.
+            float nl = 0.5 + (l - 0.5) * 0.25;
+            rgb *= half(nl / l);
+        } else if (adapt < 0.0 && l < 0.66) {
+            // Light theme, black text: anything darker than 0.66 is lifted toward it.
+            float nl = 0.66 - (0.66 - l) * 0.12;
+            rgb = mix(rgb, half3(1.0), half((nl - l) / max(1.0 - l, 0.001)));
+        }
+        col.rgb = rgb * col.a;
+    }
+    return col;
+}
+"""
 
 @Composable
 fun isDarkUi() = MaterialTheme.colorScheme.surface.luminance() < 0.4f
@@ -85,23 +144,31 @@ fun GlassSurface(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val dark = isDarkUi()
-    val style = remember(tint, dark) {
+    // Frost 1 = the frosted glass as it always was; lower = less blur and tint, more bending at the rim. The
+    // clearest still keeps some blur and tint: see-through glass over a busy picture can't be read.
+    val frost = LocalGlassFrost.current.coerceIn(0f, 1f)
+    val style = remember(tint, dark, frost) {
+        // Without the contrast shader (before Android 13) the clearest glass keeps a heavier tint to stay readable.
+        val lo = if (android.os.Build.VERSION.SDK_INT >= 33) (if (dark) 0.12f else 0.18f) else (if (dark) 0.32f else 0.38f)
+        val a = lo + ((if (dark) 0.45f else 0.62f) - lo) * frost
         HazeStyle(
             backgroundColor = tint,
-            tints = listOf(HazeTint(tint.copy(alpha = if (dark) 0.45f else 0.62f))),
-            blurRadius = 28.dp,
-            noiseFactor = 0.05f,
+            tints = listOf(HazeTint(tint.copy(alpha = a))),
+            blurRadius = (6f + 22f * frost).dp,
+            noiseFactor = 0.05f * frost,
             fallbackTint = HazeTint(tint.copy(alpha = 0.94f)),
         )
     }
-    val rim = remember(dark) {
+    val rimK = 1f + 0.6f * (1f - frost)
+    val rim = remember(dark, rimK) {
         Brush.linearGradient(
-            0f to Color.White.copy(alpha = if (dark) 0.34f else 1f),
+            0f to Color.White.copy(alpha = ((if (dark) 0.34f else 1f) * rimK).coerceAtMost(1f)),
             0.45f to Color.White.copy(alpha = if (dark) 0.05f else 0.5f),
-            1f to Color.White.copy(alpha = if (dark) 0.16f else 0.85f),
+            1f to Color.White.copy(alpha = ((if (dark) 0.16f else 0.85f) * rimK).coerceAtMost(1f)),
         )
     }
-    val sheen = Color.White.copy(alpha = if (dark) 0.07f else 0.35f)
+    val sheen = Color.White.copy(alpha = (if (dark) 0.07f else 0.35f) * (0.6f + 0.4f * frost))
+    val bend = 1f - frost
     val hairline = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.09f)
     Box(
         modifier
@@ -112,14 +179,45 @@ fun GlassSurface(
                     ambientColor = Color.Black.copy(alpha = 0.10f), spotColor = Color.Black.copy(alpha = 0.16f),
                 )
             )
-            .clip(shape)
-            .then(if (state != null) Modifier.hazeEffect(state, style) else Modifier.background(tint.copy(alpha = 0.94f)))
-            .drawBehind { drawRect(Brush.verticalGradient(0f to sheen, 0.55f to Color.Transparent)) }
-            .then(if (dark) Modifier else Modifier.border(1.dp, hairline, shape).padding(1.dp))
-            .border(1.dp, rim, shape),
+            .clip(shape),
         contentAlignment = Alignment.Center,
     ) {
+        // The backdrop on its own layer, so only it bends (never the icons and text on the glass).
+        Box(
+            Modifier.matchParentSize()
+                .then(if (state != null && android.os.Build.VERSION.SDK_INT >= 33) Modifier.refraction(shape, bend, if (dark) 1f else -1f) else Modifier)
+                .then(if (state != null) Modifier.hazeEffect(state, style) else Modifier.background(tint.copy(alpha = 0.94f)))
+                .drawBehind { drawRect(Brush.verticalGradient(0f to sheen, 0.55f to Color.Transparent)) },
+        )
+        Box(
+            Modifier.matchParentSize()
+                .then(if (dark) Modifier else Modifier.border(1.dp, hairline, shape).padding(1.dp))
+                .border(1.dp, rim, shape),
+        )
         CompositionLocalProvider(LocalContentColor provides contentColor) { content() }
+    }
+}
+
+/** Bends this layer's content at the rim of [shape] ([strength] 0..1) and keeps text readable ([adapt]: 1 dark theme, -1 light). Android 13+. */
+@androidx.annotation.RequiresApi(33)
+private fun Modifier.refraction(shape: Shape, strength: Float, adapt: Float): Modifier = composed {
+    // A shader the device can't compile leaves the plain frosted glass rather than closing the app.
+    val shader = remember { runCatching { android.graphics.RuntimeShader(REFRACTION) }.onFailure { android.util.Log.e("Glass", "shader", it) }.getOrNull() }
+        ?: return@composed this
+    val dir = androidx.compose.ui.platform.LocalLayoutDirection.current
+    graphicsLayer {
+        val w = size.width; val h = size.height
+        if (w <= 0f || h <= 0f) return@graphicsLayer
+        val r = when (val o = shape.createOutline(size, dir, this)) {
+            is androidx.compose.ui.graphics.Outline.Rounded -> o.roundRect.topLeftCornerRadius.x
+            else -> 0f
+        }.coerceAtMost(minOf(w, h) / 2f)
+        shader.setFloatUniform("size", w, h)
+        shader.setFloatUniform("radius", r)
+        shader.setFloatUniform("band", minOf(minOf(w, h) * 0.45f, 26.dp.toPx()))
+        shader.setFloatUniform("strength", strength)
+        shader.setFloatUniform("adapt", adapt)
+        renderEffect = android.graphics.RenderEffect.createRuntimeShaderEffect(shader, "content").asComposeRenderEffect()
     }
 }
 

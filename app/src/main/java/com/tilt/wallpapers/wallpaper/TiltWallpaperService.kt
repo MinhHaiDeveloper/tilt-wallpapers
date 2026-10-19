@@ -120,12 +120,18 @@ class TiltWallpaperService : WallpaperService() {
         private fun refreshEnv() {
             val st = Repo.state.value.settings
             val low = Automation.lowPower(applicationContext, st)
-            sensor.setLowPower(low)
-            renderer.setEnv(TiltRenderer.Env(low, Automation.reduceMotion(applicationContext), Automation.nightDim(applicationContext, st)))
+            val thermal = applicationContext.getSystemService(PowerManager::class.java)?.currentThermalStatus ?: 0
+            renderer.setEnv(TiltRenderer.Env(low, Automation.reduceMotion(applicationContext), Automation.nightDim(applicationContext, st), thermal))
         }
+
+        /** The phone heating up or cooling down: "Chế độ hiệu năng" (automatic) follows it. */
+        private val thermalListener = PowerManager.OnThermalStatusChangedListener { refreshEnv() }
 
         override fun onCreate(surfaceHolder: SurfaceHolder) {
             super.onCreate(surfaceHolder)
+            // Sensor readings follow the performance level (none at all for "Ảnh tĩnh").
+            renderer.onLevel = { l -> main.post { sensor.setLevel(l, visibleNow && !screenWasOff) } }
+            applicationContext.getSystemService(PowerManager::class.java)?.addThermalStatusListener(thermalListener)
             setTouchEventsEnabled(false)
             Repo.init(applicationContext)
             renderer.setState(Repo.state.value)
@@ -199,6 +205,7 @@ class TiltWallpaperService : WallpaperService() {
         }
 
         override fun onDestroy() {
+            applicationContext.getSystemService(PowerManager::class.java)?.removeThermalStatusListener(thermalListener)
             main.removeCallbacks(tick)
             runCatching { applicationContext.unregisterReceiver(powerReceiver) }
             sensor.stop()

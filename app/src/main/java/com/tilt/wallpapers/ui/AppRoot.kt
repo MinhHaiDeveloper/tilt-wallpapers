@@ -54,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
@@ -120,7 +121,8 @@ fun AppRoot() {
     }
     BackHandler(stack.size == 1 && tab != Tab.SETS) { tab = Tab.SETS }
 
-    CompositionLocalProvider(LocalNav provides nav) {
+    val frost = com.tilt.wallpapers.data.Repo.state.collectAsStateWithLifecycle().value.settings.glassFrost
+    CompositionLocalProvider(LocalNav provides nav, com.tilt.wallpapers.ui.components.LocalGlassFrost provides frost) {
         AnimatedContent(
             targetState = stack.last() to stack.size,
             contentKey = { it.first },

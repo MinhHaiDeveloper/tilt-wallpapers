@@ -19,6 +19,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Close
@@ -190,6 +192,54 @@ private fun TimeDialog(title: String, initial: Int, onDismiss: () -> Unit, onPic
     )
 }
 
+/**
+ * "Chế độ hiệu năng": Tự động (lightens only while the phone struggles) or Thủ công with a 4-step slider.
+ * Title centred, description justified, both following the choice.
+ */
+@Composable
+fun PerformanceCard(state: AppState) {
+    val s = state.settings
+    val hf = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val steps = listOf(
+        t("Đầy đủ") to t("Luôn giữ đầy đủ hiệu ứng, kể cả khi máy lag."),
+        t("Nhẹ") to t("Luôn ở 30 khung/giây, parallax yếu hơn, không hiệu ứng mở khóa. Hợp với máy tầm trung."),
+        t("Rất nhẹ") to t("Tắt parallax và hiệu ứng kính, chuyển ảnh chỉ còn mờ dần. Nghiêng vẫn đổi ảnh. Hợp với máy yếu."),
+        t("Ảnh tĩnh") to t("Như ảnh tĩnh kèm đồng hồ và chữ, nghiêng không đổi ảnh. Tốn pin ít nhất."),
+    )
+    val step = s.perfStep.coerceIn(0, 3)
+    val (title, desc) = if (s.perfAuto) t("Tự động") to t("Chỉ giảm hiệu ứng khi máy lag hoặc nóng (ví dụ mở video thu nhỏ trên màn hình chính), ổn lại thì tự trở về. Máy mạnh gần như không thấy khác.")
+        else steps[step]
+    SettingsCard(Modifier.animateContentSize()) {
+        SegmentedPicker(listOf(true, false), s.perfAuto, { if (it) t("Tự động") else t("Thủ công") }, Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp)) { v ->
+            Repo.updateSettings { it.copy(perfAuto = v) }
+        }
+        AnimatedVisibility(!s.perfAuto) {
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.AutoAwesome, t("Đầy đủ"), Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                androidx.compose.material3.Slider(
+                    value = step.toFloat(),
+                    onValueChange = { v ->
+                        val n = v.roundToInt().coerceIn(0, 3)
+                        if (n != s.perfStep) { hf.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick); Repo.updateSettings { it.copy(perfStep = n) } }
+                    },
+                    valueRange = 0f..3f, steps = 2,
+                    modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
+                )
+                Icon(Icons.Filled.Eco, t("Ảnh tĩnh"), Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Text(
+            title, style = MaterialTheme.typography.titleLarge, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 14.dp),
+        )
+        Text(
+            desc, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Justify,
+            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 16.dp),
+        )
+    }
+}
+
 /** Battery saver and night dimming. */
 @Composable
 fun PowerNightCard(state: AppState) {
@@ -199,7 +249,7 @@ fun PowerNightCard(state: AppState) {
     SettingsCard(Modifier.animateContentSize()) {
         SwitchRow(
             t("Tiết kiệm pin"),
-            t("Khi máy bật Tiết kiệm pin hoặc pin dưới %1\$s%%: 30 khung hình/giây, đọc cảm biến thưa hơn, tắt parallax", s.batteryThreshold),
+            t("Khi máy bật Tiết kiệm pin hoặc pin dưới %1\$s%%: hình nền dùng mức Rất nhẹ (30 khung hình/giây, tắt parallax và hiệu ứng kính)", s.batteryThreshold),
             s.batterySaver, Icons.Filled.BatterySaver,
         ) { v -> Repo.updateSettings { it.copy(batterySaver = v) } }
         AnimatedVisibility(s.batterySaver) {

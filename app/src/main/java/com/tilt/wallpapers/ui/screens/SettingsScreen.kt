@@ -93,6 +93,7 @@ fun SettingsScreen() {
                 Spacer(Modifier.height(8.dp))
                 ThemeColorSection(state)
                 // Glass of bars and buttons: frosted at the right, clearer (bending at the edges) to the left.
+                com.tilt.wallpapers.ui.components.GlassPreview(Repo.centerImage(state), Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp))
                 SliderRow(t("Độ mờ của kính"), s.glassFrost, 0f..1f, {
                     when { it < 0.2f -> t("Trong"); it < 0.45f -> t("Hơi trong"); it < 0.75f -> t("Vừa"); else -> t("Mờ") }
                 }) { v -> Repo.updateSettings { it.copy(glassFrost = v) } }

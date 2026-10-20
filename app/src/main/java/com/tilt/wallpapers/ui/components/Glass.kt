@@ -101,11 +101,13 @@ half4 main(float2 xy) {
                           sdRound(p + float2(0.0, 1.0), c, radius) - sdRound(p - float2(0.0, 1.0), c, radius));
         float2 n = normalize(g + float2(1e-5, 1e-5));
         float t = 1.0 - clamp(d / band, 0.0, 1.0);
-        float k = t * t * strength * band * 0.6;
+        // A thick lens: the rim pulls the picture from well inside, strongly near the edge, with a clear
+        // colour fringe.
+        float k = pow(t, 1.6) * strength * band * 1.5;
         col = content.eval(xy - n * k);
-        col.r = content.eval(xy - n * k * 1.07).r;
-        col.b = content.eval(xy - n * k * 0.93).b;
-        float spec = t * t * t * max(0.0, dot(n, normalize(float2(-1.0, -1.0)))) * 0.32 * strength;
+        col.r = content.eval(xy - n * k * 1.2).r;
+        col.b = content.eval(xy - n * k * 0.8).b;
+        float spec = t * t * t * max(0.0, dot(n, normalize(float2(-1.0, -1.0)))) * 0.5 * strength;
         col.rgb += half3(spec) * col.a;
     }
     if (col.a > 0.0 && adapt != 0.0) {
@@ -214,8 +216,9 @@ private fun Modifier.refraction(shape: Shape, strength: Float, adapt: Float): Mo
         }.coerceAtMost(minOf(w, h) / 2f)
         shader.setFloatUniform("size", w, h)
         shader.setFloatUniform("radius", r)
-        shader.setFloatUniform("band", minOf(minOf(w, h) * 0.45f, 26.dp.toPx()))
-        shader.setFloatUniform("strength", strength)
+        shader.setFloatUniform("band", minOf(minOf(w, h) * 0.5f, 40.dp.toPx()))
+        // Square root: already plainly bent in the middle of the slider, not only at its clear end.
+        shader.setFloatUniform("strength", kotlin.math.sqrt(strength.coerceIn(0f, 1f)))
         shader.setFloatUniform("adapt", adapt)
         renderEffect = android.graphics.RenderEffect.createRuntimeShaderEffect(shader, "content").asComposeRenderEffect()
     }

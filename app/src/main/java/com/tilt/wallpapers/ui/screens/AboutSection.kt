@@ -61,6 +61,9 @@ import com.tilt.wallpapers.ui.components.bounceClick
 private class Release(val version: String, val date: String, val notes: List<String>)
 
 private val releases = listOf(
+    Release("1.5.2.4", "20/10/2026", listOf("Đổi chế độ hiệu năng ngay từ ô Tilt trong Cài đặt nhanh")),
+    Release("1.5.2.3", "19/10/2026", listOf("Mép kính bẻ cong ánh sáng mạnh hơn, có viền màu")),
+    Release("1.5.2.2", "19/10/2026", listOf("Xem trước kính trôi trên nền ngay trong Cài đặt")),
     Release("1.5.2.1", "19/10/2026", listOf("Chữ trên kính trong luôn đọc được, kể cả giao diện tối trên ảnh sáng")),
     Release("1.5.2.0", "19/10/2026", listOf("Kính kiểu Liquid Glass: chỉnh độ mờ, kính trong hơn có khúc xạ ở mép như giọt nước")),
     Release("1.5.1.9", "19/10/2026", listOf("Chế độ hiệu năng: tự giảm hiệu ứng khi máy lag hoặc nóng, hoặc chọn mức cố định", "Tiết kiệm pin dùng mức Rất nhẹ (tắt cả hiệu ứng kính)")),

@@ -28,6 +28,9 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.filled.Wallpaper
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -172,6 +175,31 @@ private fun QuickPanel(onDismiss: () -> Unit, launch: (Intent) -> Unit) {
                 )
             }
             Switch(state.settings.tiltLock, { Repo.setTiltLock(it) })
+        }
+        // "Chế độ hiệu năng" without opening the app: Tự động, or one of the manual steps.
+        Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.Speed, null, tint = cs.onSurfaceVariant)
+            Spacer(Modifier.width(14.dp))
+            Text(t("Chế độ hiệu năng"), style = MaterialTheme.typography.titleMedium)
+        }
+        val s = state.settings
+        val choices = listOf(-1 to t("Tự động"), 0 to t("Đầy đủ"), 1 to t("Nhẹ"), 2 to t("Rất nhẹ"), 3 to t("Ảnh tĩnh"))
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            choices.forEach { (k, label) ->
+                val sel = if (k < 0) s.perfAuto else !s.perfAuto && s.perfStep == k
+                Text(
+                    label, style = MaterialTheme.typography.labelLarge,
+                    color = if (sel) cs.onPrimaryContainer else cs.onSurface,
+                    modifier = Modifier.clip(CircleShape).background(if (sel) cs.primaryContainer else cs.surfaceContainerHighest)
+                        .bounceClick(pressedScale = 0.92f, haptic = false) {
+                            hf.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                            Repo.updateSettings { if (k < 0) it.copy(perfAuto = true) else it.copy(perfAuto = false, perfStep = k) }
+                        }.padding(horizontal = 14.dp, vertical = 8.dp),
+                )
+            }
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AppButton(t("Ảnh tiếp"), icon = Icons.AutoMirrored.Filled.ArrowForward, style = BtnStyle.Tonal, modifier = Modifier.weight(1f), enabled = active != null) {
